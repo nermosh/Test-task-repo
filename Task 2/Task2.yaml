@@ -1,0 +1,324 @@
+openapi: 3.0.0
+info:
+  title: User Service API
+  description: API for managing users and service plans
+  version: v1
+servers:
+  - url: https://api-demo.scalablesolutions.io/api/3
+    description: Main production server
+paths:
+  /api/external/user:
+  
+    get:
+      summary: Get user information
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: string
+            pattern: "^[0-9]{7}$"
+          example: "3453255"
+          description: Unique user identifier (7 characters)
+        - in: query
+          name: from
+          schema:
+            type: integer
+            format: int64
+          description: Pagination start timestamp (nanoseconds)
+        - in: query
+          name: to
+          schema:
+            type: integer
+            format: int64
+          description: Pagination end timestamp (nanoseconds)
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 1000
+            default: 1000
+            example: 100
+          description: Limit to records returned (10-1000, default 1000)
+        - in: query
+          name: provider_id
+          schema:
+            type: string
+            pattern: "^[0-9]{4}$"
+          description: Unique identifier of the partner (4 characters)
+          example: 2323
+      responses:
+       "200":
+        description: Successful operation
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/User'
+                provider_id:
+                  type: string
+                  description: Unique identifier of the partner a user bound to
+                  example: 2323
+                status:
+                  type: string
+                  enum: [active, inactive, idle, signing]
+                  description: User service state
+                user_type:
+                  type: string
+                  enum: [basic, guest, company, advanced, admin]
+                  description: User type
+                zone:
+                  type: string
+                  pattern: ^[a-z]{2}$
+                  description: Region of residence (ISO 3166-1 alpha-2 code)
+                  example: gb
+                sub_status:
+                  type: string
+                  enum: [signed, unsigned, absent]
+                  description: User subscription sub-status
+  /api/external/user/{user_id}/subscription/:
+    post:
+      summary: Purchasing the plan subscription
+      parameters:
+        - in: path
+          name: user_id
+          schema:
+            type: string
+            pattern: "^[0-9]{7}$"
+            example: "3453255"
+            description: Unique user identifier (7 characters)
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan_id:
+                  type: string
+                  description: Identifier of the plan to be purchased
+              required:
+                - plan_id
+      responses:
+        '202': 
+          description: Request is accepted. Waiting for the confirmation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User' 
+        '400': 
+          description: Incorrect request
+  /api/external/user/{user_id}/subscription/confirm:
+    post:
+      summary: Confirming the purchase of the plan subscription
+      parameters:
+        - in: path
+          name: user_id
+          schema:
+            type: string
+            pattern: "^[0-9]{7}$"
+            example: "3453255"
+            description: Unique user identifier (7 characters)
+          required: true
+      responses:
+        '200':
+          description: Subscription is purchased successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Incorrect request (User is not is "signing" status)        
+  /api/partner:
+    get:
+      summary: Get partner information
+      parameters:
+        - in: query
+          name: provider_id
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9]{4}$
+          description: Unique partner identifier (4 characters)
+          required: true
+          example: 2323
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, stopped]
+          description: Partner operation state
+        - in: query
+          name: from
+          schema:
+            type: integer
+            format: int64
+          description: Pagination start timestamp (nanoseconds)
+        - in: query
+          name: to
+          schema:
+            type: integer
+            format: int64
+          description: Pagination end timestamp (nanoseconds)
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider_id:
+                    type: string
+                    description: Unique partner identifier
+                  status:
+                    type: string
+                    enum: [active, stopped]
+                    description: Partner operation state
+                required:
+                  - provider_id
+                  - status
+
+
+  /api/partner/{provider_id}/service_plan:
+    get:
+      summary: Get available service plans for the user
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          description: User id value to filter plans
+        - in: query
+          name: from
+          schema:
+            type: integer
+            format: int64
+          description: Pagination start timestamp (nanoseconds)
+        - in: query
+          name: to
+          schema:
+            type: integer
+            format: int64
+          description: Pagination end timestamp (nanoseconds)
+
+        - in: query
+          name: user_type
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [basic, company, advanced]
+          style: form
+          explode: false
+          description: List of user types separated by comma for filtering.
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServicePlan"
+
+    post:
+      summary: Create a new service plan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServicePlan"
+      responses:
+        "201":
+          description: Service plan created
+      security:
+        - basicAuth: []
+    put:
+      summary: Update an existing service plan
+      parameters:
+        - in: path
+          name: plan_id
+          schema:
+            type: string
+          required: true
+          description: Identifier of the service plan to update
+          example: 1234567
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServicePlan"
+      responses:
+        "200":
+          description: Service plan updated
+      security:
+        - basicAuth: []
+    delete:
+      summary: Delete a service plan
+      parameters:
+        - in: path
+          name: plan_id
+          schema:
+            type: string
+          required: true
+          description: Identifier of the service plan to delete
+          example: 1234567
+      responses:
+        "204":
+          description: Service plan deleted
+      security:
+        - basicAuth: []
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          pattern: "^[0-9]{7}$"
+          example: "3453255"
+          description: Unique user identifier (7 characters)
+        status:
+          type: string
+          enum: [active, inactive, idle, signing]
+        service_plan: 
+          $ref: '#/components/schemas/ServicePlan'
+    ServicePlan:
+      type: object
+      nullable: true
+      description: The user's acquired service plan (can be null)
+      properties:
+        plan_id:
+          type: string
+          description: Unique identifier of the service plan
+          example: 1234567
+        provider_id:
+          type: string
+          description: Unique identifier of the provider who owns the service plan
+          example: 2323
+        name:
+          type: string
+          description: Name of the service plan
+          example: Pro
+        plan_description:
+          type: string
+          description: Description of the service plan
+          example: Service Plan setting the Basic User type
+        user_type:
+          type: string
+          enum: [basic, company, advanced]
+          description: User type mapped to the subscription
+          example: basic
+        price:
+          type: number
+          format: float
+          description: Price of the service plan
+          example: 55
+      required:
+        - plan_id
+        - name
+        - plan_description
+        - price
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
